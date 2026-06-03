@@ -5,8 +5,9 @@ from document_assistant.core.repository import SessionRepository
 from document_assistant.core.ingestor import DocumentIngestor
 from document_assistant.core.tools.registry import ToolRegistry
 from document_assistant.orchestration.manager import SessionManager
-from document_assistant.orchestration.agent import AgentOrchestrator
+from document_assistant.orchestration.single_agent import SingleAgentOrchestrator
 from document_assistant.api.assistant import Assistant
+
 
 def build_assistant(use_local_llm: bool = True) -> Assistant:
     """
@@ -24,7 +25,7 @@ def build_assistant(use_local_llm: bool = True) -> Assistant:
 
     tool_registry = ToolRegistry(vector_store=vector_store, session_manager=session_manager)
 
-    orchestrator = AgentOrchestrator(
+    orchestrator = SingleAgentOrchestrator(
         session_manager=session_manager,
         tool_registry=tool_registry,
         use_local=use_local_llm,
@@ -35,6 +36,7 @@ def build_assistant(use_local_llm: bool = True) -> Assistant:
 
     print("System ready.")
     return assistant
+
 
 # ==========================================
 # Example Usage (Simulating a UI interaction)
@@ -55,6 +57,7 @@ print(f"User: {user_msg}")
 
 agent_response = assistant.chat(user_msg)
 print(f"Agent: {agent_response}")
+
 
 def create_colab_ui(assistant):
     """
@@ -78,7 +81,7 @@ def create_colab_ui(assistant):
     # Dynamic Checkbox area for sources
     sources_header = widgets.HTML("<b>Active Sources (Include in RAG):</b>")
     sources_box = widgets.VBox([])
-    checkboxes_dict = {} # Maps source_id to the Checkbox widget
+    checkboxes_dict = {}  # Maps source_id to the Checkbox widget
 
     def update_sources_ui():
         """Pulls the latest registry from the Assistant and updates checkboxes."""
@@ -108,7 +111,7 @@ def create_colab_ui(assistant):
             if result.get("status") == "success":
                 print(f"✅ Success! (ID: {result.get('source_id')[:8]}...)")
                 update_sources_ui()
-                file_input.value = "" # Clear input
+                file_input.value = ""  # Clear input
             else:
                 print(f"❌ Error: {result.get('message')}")
 
@@ -163,7 +166,7 @@ def create_colab_ui(assistant):
                 print(f"\n⚠️ UI Caught Error: {str(e)}\n")
 
     send_btn.on_click(on_send_clicked)
-    msg_input.on_submit(lambda x: on_send_clicked(None)) # Allow 'Enter' to send
+    msg_input.on_submit(lambda x: on_send_clicked(None))  # Allow 'Enter' to send
 
     # Assemble Right Panel
     right_panel = widgets.VBox([
@@ -175,9 +178,11 @@ def create_colab_ui(assistant):
     # ==========================================
     # RENDER MAIN LAYOUT
     # ==========================================
-    update_sources_ui() # Initial population
-    main_layout = widgets.HBox([left_panel, right_panel], layout=widgets.Layout(width='100%', justify_content='space-between'))
+    update_sources_ui()  # Initial population
+    main_layout = widgets.HBox([left_panel, right_panel],
+                               layout=widgets.Layout(width='100%', justify_content='space-between'))
     display(main_layout)
+
 
 # Execute the UI
 # Use previously initialized assistant

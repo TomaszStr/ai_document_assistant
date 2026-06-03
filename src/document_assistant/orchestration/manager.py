@@ -1,6 +1,9 @@
+from typing import List
+
 from document_assistant.core.ingestor import DocumentIngestor
 from document_assistant.core.repository import SessionRepository
 from document_assistant.orchestration.state import SessionState
+
 
 class SessionManager:
     """
@@ -45,12 +48,20 @@ class SessionManager:
         print(f"Document registered to session {session_id}. Receipt: {source_id}")
         return source_id
 
-    def add_message(self, role: str, content: str):
+    def add_message(self, role: str, content: str, metadata: dict = None):
         """Appends a message to the multi-turn chat history."""
         if not self.active_state:
             raise ValueError("No active session loaded.")
 
-        self.active_state.chat_history.append({"role": role, "content": content})
+        msg = {
+            "role": role,
+            "content": content
+        }
+
+        if metadata:
+            msg["metadata"] = metadata
+
+        self.active_state.chat_history.append(msg)
         self.save_session()
 
     def get_context(self) -> SessionState:

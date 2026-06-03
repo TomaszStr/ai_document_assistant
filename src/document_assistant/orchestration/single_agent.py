@@ -3,28 +3,47 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
+from document_assistant.core.observability import AgentObservabilityLogsHandler, TurnMetricsHandler
+from document_assistant.orchestration.base import BaseOrchestrator
 from document_assistant.orchestration.manager import SessionManager
 from document_assistant.core.tools.registry import ToolRegistry
 
-class AgentOrchestrator:
+
+class SingleAgentOrchestrator(BaseOrchestrator):
     """
     The General Orchestrator Agent (Phase 1).
     Evaluates user intent, executes actions, and synthesizes responses.
     """
+
     def __init__(self, session_manager: SessionManager,
                  tool_registry: ToolRegistry, use_local: bool = True,
                  temperature: float = 0.0, model: str = None):
         self.session_manager = session_manager
         self.tools = tool_registry.get_tools()
         self.temperature = temperature
+        self.use_local = use_local
 
         # Initialize LLM
-        if use_local:
-            print("Initializing Local LLM via Ollama...")
-            self.llm = ChatOllama(model="llama3.1" if model is None else model, temperature=self.temperature)
+        self.update_model(model="qwen3.5:4b" if model is None else model, use_local=use_local)
+
+    def update_model(self, model: str, use_local: bool = None):
+        """Dynamically updates the LLM and rebuilds the agent executor."""
+        if use_local is not None:
+            self.use_local = use_local
+
+        if self.use_local:
+            print(f"Initializing Local LLM via Ollama ({model})...")
+            self.llm = ChatOllama(
+                model=model,
+                num_ctx=1024, # Limit context
+                temperature=self.temperature
+            )
         else:
-            print("Initializing Cloud Fallback (OpenAI)...")
-            self.llm = ChatOpenAI(model="gpt-4o-mini" if model is None else model, temperature=self.temperature)
+            print(f"Initializing Cloud Fallback (OpenAI) ({model})...")
+            self.llm = ChatOpenAI(
+                model=model,
+                temperature=self.temperature
+            )
 
         self.agent_executor = self._build_agent()
 
@@ -72,15 +91,20 @@ class AgentOrchestrator:
         # Agent ReAct loop
         print(f"\n--- AGENT THINKING ---")
 
-        response = self.agent_executor.invoke({
-            "messages": messages
-        })
+        logs_handler = AgentObservabilityLogsHandler()
+        metrics_handler = TurnMetricsHandler()
+
+        response = self.agent_executor.invoke(
+            input={"messages": messages},
+            config={"callbacks": [logs_handler, metrics_handler]}
+        )
 
         final_message = response["messages"][-1]
         output = final_message.content if final_message.content else "I could not generate a response."
+        turn_stats = metrics_handler.metrics
 
         # Update Session State
         self.session_manager.add_message("user", user_input)
-        self.session_manager.add_message("assistant", output)
+        self.session_manager.add_message("assistant", output, metadata=turn_stats)
 
         return output

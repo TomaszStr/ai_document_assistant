@@ -1,6 +1,8 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 from document_assistant.orchestration.manager import SessionManager
-from document_assistant.orchestration.agent import AgentOrchestrator
+from document_assistant.orchestration.single_agent import SingleAgentOrchestrator
+from document_assistant.core.utils import get_ollama_models
+
 
 class Assistant:
     """
@@ -8,7 +10,8 @@ class Assistant:
     Exposes a clean, simplified API for any UI (Streamlit, FastAPI, CLI) to consume.
     The UI should NEVER import LangChain or ChromaDB directly.
     """
-    def __init__(self, session_manager: SessionManager, orchestrator: AgentOrchestrator):
+
+    def __init__(self, session_manager: SessionManager, orchestrator: SingleAgentOrchestrator):
         self._session_manager = session_manager
         self._orchestrator = orchestrator
 
@@ -46,6 +49,18 @@ class Assistant:
         except Exception as e:
             return f"Agent Error: {str(e)}"
 
+    def get_available_models(self) -> List[str]:
+        """Returns a list of available local models."""
+        return get_ollama_models()
+
+    def change_model(self, model_name: str, use_local: bool = True) -> str:
+        """Dynamically switches the model used by the orchestrator."""
+        try:
+            self._orchestrator.update_model(model=model_name, use_local=use_local)
+            return f"Successfully switched to model: {model_name}"
+        except Exception as e:
+            return f"Failed to switch model: {str(e)}"
+
     def get_status(self) -> Dict[str, Any]:
         """Returns a snapshot of the current session for the UI to render."""
         state = self._session_manager.get_context()
@@ -57,5 +72,3 @@ class Assistant:
             "documents": list(state.registry.values()),
             "message_count": len(state.chat_history)
         }
-
-
