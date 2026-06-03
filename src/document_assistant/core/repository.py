@@ -1,6 +1,9 @@
 import os
 import json
+from typing import List
+
 from document_assistant.orchestration.state import SessionState
+
 
 class SessionRepository:
     """Handles the persistence of the SessionState to the filesystem."""
@@ -28,6 +31,7 @@ class SessionRepository:
                     session_id=data["session_id"],
                     registry=data.get("registry", {}),
                     chat_history=data.get("chat_history", []),
+                    system_memory=data.get("system_memory", []),
                     tool_logs=data.get("tool_logs", [])
                 )
         # Return a fresh state if no file exists
