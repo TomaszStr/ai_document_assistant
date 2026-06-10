@@ -31,7 +31,7 @@ class Assistant:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    def chat(self, message: str, allowed_sources: list[str] = None) -> str:
+    def chat(self, message: str, allowed_sources: list[str] = None, callbacks: list = None) -> str:
         """
         Sends a user message to the ReAct agent.
         Optionally filters the RAG search to specific source IDs.
@@ -44,7 +44,7 @@ class Assistant:
             self._session_manager.set_active_filters(allowed_sources)
 
             # Run the Agent
-            response = self._orchestrator.invoke(message)
+            response = self._orchestrator.invoke(message, additional_callbacks=callbacks)
             return response
         except Exception as e:
             return f"Agent Error: {str(e)}"

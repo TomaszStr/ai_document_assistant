@@ -37,6 +37,14 @@ class SessionRepository:
         # Return a fresh state if no file exists
         return SessionState(session_id=session_id)
 
+    def list_sessions(self) -> List[str]:
+        """Returns a list of session IDs found in the storage directory."""
+        sessions = []
+        for filename in os.listdir(self.storage_dir):
+            if filename.endswith(".json"):
+                sessions.append(filename[:-5])
+        return sessions
+
     def set_active_filters(self, source_ids: List[str] = None):
         """Temporarily scopes the session to specific documents for the next agent run."""
         if not self.active_state:
