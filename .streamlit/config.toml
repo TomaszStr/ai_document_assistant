@@ -1,0 +1,9 @@
+[server]
+# The modern way to disable aggressive file watching
+fileWatcherType = "none"
+# Run headless to prevent some browser-spawn logs
+headless = true
+
+[logger]
+# Suppresses all info/warning logs (like "Server started on...")
+level = "error"

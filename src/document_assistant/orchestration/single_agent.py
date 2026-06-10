@@ -35,7 +35,7 @@ class SingleAgentOrchestrator(BaseOrchestrator):
             print(f"Initializing Local LLM via Ollama ({model})...")
             self.llm = ChatOllama(
                 model=model,
-                num_ctx=1024, # Limit context
+                num_ctx=1024,  # Limit context
                 temperature=self.temperature
             )
         else:
@@ -68,7 +68,7 @@ class SingleAgentOrchestrator(BaseOrchestrator):
 
         return agent
 
-    def invoke(self, user_input: str) -> str:
+    def invoke(self, user_input: str, additional_callbacks: list = None) -> str:
         """
         Takes the user input, injects the active session history,
         runs the agent graph loop, and saves the result.
@@ -94,9 +94,13 @@ class SingleAgentOrchestrator(BaseOrchestrator):
         logs_handler = AgentObservabilityLogsHandler()
         metrics_handler = TurnMetricsHandler()
 
+        callbacks = [logs_handler, metrics_handler]
+        if additional_callbacks:
+            callbacks.extend(additional_callbacks)
+
         response = self.agent_executor.invoke(
             input={"messages": messages},
-            config={"callbacks": [logs_handler, metrics_handler]}
+            config={"callbacks": callbacks}
         )
 
         final_message = response["messages"][-1]
