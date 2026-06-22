@@ -37,7 +37,7 @@ def get_assistant():
     tool_registry = ToolRegistry(vector_store=vector_store, session_manager=session_manager)
     orchestrator = SingleAgentOrchestrator(session_manager=session_manager, tool_registry=tool_registry,
                                            model="llama3.2:3b", use_local=True)
-    return Assistant(session_manager=session_manager, orchestrator=orchestrator)
+    return Assistant(session_manager=session_manager, orchestrator=orchestrator, tool_registry=tool_registry)
 
 
 assistant = get_assistant()
@@ -91,7 +91,39 @@ if "uploader_key" not in st.session_state:
 with st.sidebar:
     st.title("🛠️ Workspace Controls")
 
-    # Session Management
+    # --- Configuration ---
+    st.subheader("⚙️ Configuration")
+
+    # Model Selection
+    available_models = assistant.get_available_models()
+    current_model = getattr(assistant._orchestrator, 'model_name', available_models[0] if available_models else "")
+
+    selected_model = st.selectbox(
+        "LLM Model",
+        options=available_models,
+        index=available_models.index(current_model) if current_model in available_models else 0
+    )
+    if selected_model != current_model:
+        with st.spinner(f"Loading {selected_model}..."):
+            assistant.change_model(selected_model)
+            st.rerun()
+
+    # Agent Mode
+    current_mode = assistant.mode
+    new_mode = st.radio(
+        "Select Orchestrator",
+        options=["single", "multi"],
+        index=0 if current_mode == "single" else 1,
+        format_func=lambda x: "Single-Agent (Legacy)" if x == "single" else "Multi-Agent (Supervisor)"
+    )
+    if new_mode != current_mode:
+        with st.spinner(f"Switching to {new_mode}-agent mode..."):
+            assistant.switch_mode(new_mode)
+            st.rerun()
+
+    st.divider()
+
+    # --- 1. Session Management ---
     st.subheader("📁 Sessions")
     available_sessions = get_stored_sessions()
 
@@ -186,8 +218,11 @@ for msg in st.session_state.messages:
 
         if msg["role"] == "assistant" and "metadata" in msg:
             meta = msg["metadata"]
-            if meta.get("tools_called") or meta.get("source_chunks") or meta.get("tokens"):
+            if meta.get("tools_called") or meta.get("source_chunks") or meta.get("tokens") or meta.get("orchestrator"):
                 with st.expander("🛠️ Tool Calls & Diagnostics"):
+                    if "orchestrator" in meta:
+                        st.markdown(f"**Orchestrator Engine:** `{meta['orchestrator']}`")
+
                     if "tokens" in meta:
                         tk = meta["tokens"]
                         st.caption(

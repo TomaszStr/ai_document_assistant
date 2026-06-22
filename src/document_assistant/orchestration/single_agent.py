@@ -4,9 +4,9 @@ from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
 from document_assistant.core.observability import AgentObservabilityLogsHandler, TurnMetricsHandler
+from document_assistant.core.tools.registry import ToolRegistry
 from document_assistant.orchestration.base import BaseOrchestrator
 from document_assistant.orchestration.manager import SessionManager
-from document_assistant.core.tools.registry import ToolRegistry
 
 
 class SingleAgentOrchestrator(BaseOrchestrator):
@@ -24,7 +24,7 @@ class SingleAgentOrchestrator(BaseOrchestrator):
         self.use_local = use_local
 
         # Initialize LLM
-        self.update_model(model="qwen3.5:4b" if model is None else model, use_local=use_local)
+        self.update_model(model="llama3.2:3b" if model is None else model, use_local=use_local)
 
     def update_model(self, model: str, use_local: bool = None):
         """Dynamically updates the LLM and rebuilds the agent executor."""
@@ -44,6 +44,7 @@ class SingleAgentOrchestrator(BaseOrchestrator):
                 model=model,
                 temperature=self.temperature
             )
+        print("Initialized")
 
         self.agent_executor = self._build_agent()
 
@@ -91,7 +92,7 @@ class SingleAgentOrchestrator(BaseOrchestrator):
         # Agent ReAct loop
         print(f"\n--- AGENT THINKING ---")
 
-        logs_handler = AgentObservabilityLogsHandler()
+        logs_handler = AgentObservabilityLogsHandler(orchestrator_type="Single-Agent")
         metrics_handler = TurnMetricsHandler()
 
         callbacks = [logs_handler, metrics_handler]
@@ -105,7 +106,9 @@ class SingleAgentOrchestrator(BaseOrchestrator):
 
         final_message = response["messages"][-1]
         output = final_message.content if final_message.content else "I could not generate a response."
+
         turn_stats = metrics_handler.metrics
+        turn_stats["orchestrator"] = "Single-Agent"
 
         # Update Session State
         self.session_manager.add_message("user", user_input)
