@@ -33,7 +33,6 @@ class MultiAgentOrchestrator(BaseOrchestrator):
                  temperature: float = 0.0, model: str = None):
         self.session_manager = session_manager
 
-        # Categorize tools by agent specialization
         all_tools = tool_registry.get_tools()
         self.search_tools = [t for t in all_tools if t.name in ["semantic_search"]]
         self.summary_tools = [t for t in all_tools if t.name in ["get_document_overview", "summarize_specific_section"]]
@@ -103,7 +102,6 @@ class MultiAgentOrchestrator(BaseOrchestrator):
             )
         )
 
-        # Define Orchestrator Handoff Tools (Pydantic schemas)
         class TransferToSearch(BaseModel):
             """Use this tool to route the user's request to the SearchAgent. The SearchAgent is the ONLY agent capable of answering specific questions, finding facts, or checking if a specific technology (like RAG) is mentioned in the text."""
             pass
@@ -119,7 +117,6 @@ class MultiAgentOrchestrator(BaseOrchestrator):
         orchestrator_tools = [TransferToSearch, TransferToSummary, TransferToMetadata]
         orchestrator_llm = self.llm.bind_tools(orchestrator_tools)
 
-        # Node Functions
         def orchestrator_node(state: AgentState) -> Command[
             Literal["SearchWorker", "SummaryWorker", "MetadataWorker", "__end__"]]:
             sys_msg = SystemMessage(content=(
@@ -148,36 +145,29 @@ class MultiAgentOrchestrator(BaseOrchestrator):
                 if t_name == "TransferToMetadata":
                     return Command(goto="MetadataWorker", update={"messages": [response]})
 
-            # Final response
             return Command(goto=END, update={"messages": [response]})
 
         def _worker_step(agent, state: AgentState, name: str, config: RunnableConfig) -> Command[Literal["Orchestrator"]]:
             """Helper to execute a worker with State Filtering."""
-            # Get the orchestrator's tool call to satisfy it upon return
             last_msg = state["messages"][-1]
             tool_call_id = last_msg.tool_calls[0]["id"]
             tool_name = last_msg.tool_calls[0]["name"]
 
             # STATE FILTERING:
-            # We filter out the Orchestrator's internal reasoning and tool calls.
-            # The worker only sees the chat history leading up to the human message + human message.
             filtered_messages = []
             for m in state["messages"]:
                 if isinstance(m, HumanMessage):
                     filtered_messages.append(m)
                 elif isinstance(m, AIMessage):
-                    # Exclude messages with tool_calls to prevent INVALID_CHAT_HISTORY in worker
                     if not getattr(m, 'tool_calls', None):
                         filtered_messages.append(m)
 
-            # Pass config down with run_name injected so on_chain_start can log the specific agent name
             child_config = config.copy() if config else {}
             child_config["run_name"] = name
 
             result = agent.invoke({"messages": filtered_messages}, config=child_config)
             worker_output = result["messages"][-1].content
 
-            # Return the worker's output as the ToolMessage to fulfill the Orchestrator's tool call
             tool_msg = ToolMessage(content=worker_output, tool_call_id=tool_call_id, name=tool_name)
             return Command(goto="Orchestrator", update={"messages": [tool_msg]})
 
@@ -190,7 +180,6 @@ class MultiAgentOrchestrator(BaseOrchestrator):
         def metadata_node(state: AgentState, config: RunnableConfig):
             return _worker_step(metadata_agent, state, "MetadataAgent", config)
 
-        # 4. Define Graph
         builder = StateGraph(AgentState)
         builder.add_node("Orchestrator", orchestrator_node)
         builder.add_node("SearchWorker", search_node)
@@ -207,7 +196,6 @@ class MultiAgentOrchestrator(BaseOrchestrator):
         if not state:
             return "System Error: No active session loaded."
 
-        # Reconstruct message objects from session history
         messages = []
         for msg in state.chat_history:
             if msg["role"] == "user":
@@ -218,7 +206,6 @@ class MultiAgentOrchestrator(BaseOrchestrator):
 
         print(f"\n--- MULTI-AGENT ORCHESTRATION ---")
 
-        # Reuse existing observability handlers
         logs_handler = AgentObservabilityLogsHandler(orchestrator_type="Multi-Agent")
         metrics_handler = TurnMetricsHandler()
 
@@ -238,7 +225,6 @@ class MultiAgentOrchestrator(BaseOrchestrator):
         turn_stats = metrics_handler.metrics
         turn_stats["orchestrator"] = "Multi-Agent (Supervisor)"
 
-        # Persist results to session
         self.session_manager.add_message("user", user_input)
         self.session_manager.add_message("assistant", output, metadata=turn_stats)
 
