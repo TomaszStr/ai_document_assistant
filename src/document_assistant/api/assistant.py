@@ -1,7 +1,11 @@
 from typing import Dict, Any, List
-from document_assistant.orchestration.manager import SessionManager
-from document_assistant.orchestration.single_agent import SingleAgentOrchestrator
+
+from document_assistant.core.tools.registry import ToolRegistry
 from document_assistant.core.utils import get_ollama_models
+from document_assistant.orchestration.base import BaseOrchestrator
+from document_assistant.orchestration.manager import SessionManager
+from document_assistant.orchestration.multi_agent import MultiAgentOrchestrator
+from document_assistant.orchestration.single_agent import SingleAgentOrchestrator
 
 
 class Assistant:
@@ -11,9 +15,49 @@ class Assistant:
     The UI should NEVER import LangChain or ChromaDB directly.
     """
 
-    def __init__(self, session_manager: SessionManager, orchestrator: SingleAgentOrchestrator):
+    def __init__(self, session_manager: SessionManager, orchestrator: BaseOrchestrator,
+                 tool_registry: ToolRegistry = None):
         self._session_manager = session_manager
         self._orchestrator = orchestrator
+        self._tool_registry = tool_registry
+        # We start by defaulting to whatever orchestrator was passed in
+        self.mode = "multi" if isinstance(orchestrator, MultiAgentOrchestrator) else "single"
+
+    def switch_mode(self, mode: str) -> str:
+        """Dynamically hot-swaps the underlying orchestrator engine."""
+        if self.mode == mode:
+            return f"Already in {mode} mode."
+
+        if not self._tool_registry:
+            raise ValueError("ToolRegistry is required to switch modes dynamically.")
+
+        # Extract current configuration to carry over
+        current_model = getattr(self._orchestrator, 'model_name', "llama3.2:3b")
+        current_use_local = getattr(self._orchestrator, 'use_local', True)
+        current_temp = getattr(self._orchestrator, 'temperature', 0.0)
+
+        if mode == "multi":
+            self._orchestrator = MultiAgentOrchestrator(
+                session_manager=self._session_manager,
+                tool_registry=self._tool_registry,
+                model=current_model,
+                use_local=current_use_local,
+                temperature=current_temp
+            )
+            self.mode = "multi"
+        elif mode == "single":
+            self._orchestrator = SingleAgentOrchestrator(
+                session_manager=self._session_manager,
+                tool_registry=self._tool_registry,
+                model=current_model,
+                use_local=current_use_local,
+                temperature=current_temp
+            )
+            self.mode = "single"
+        else:
+            raise ValueError(f"Unknown orchestrator mode: {mode}")
+
+        return f"Successfully switched to {mode}-agent orchestration."
 
     def set_session(self, session_id: str):
         """Initializes or switches the active conversational context."""

@@ -1,4 +1,5 @@
 import logging
+
 from langchain_core.callbacks import BaseCallbackHandler
 
 # Setup persistent file logging
@@ -46,13 +47,17 @@ def extract_token_usage(response) -> dict:
 class AgentObservabilityLogsHandler(BaseCallbackHandler):
     """Custom callback to listen to Single and Multi-Agent execution steps."""
 
+    def __init__(self, orchestrator_type: str = "Single-Agent"):
+        self.orchestrator_type = orchestrator_type
+
     def _get_agent_name(self, kwargs: dict) -> str:
         """Helper to extract which agent/node is currently executing."""
         tags = kwargs.get("tags", [])
+        base_name = f"[{self.orchestrator_type}]"
         if tags:
             # LangGraph often injects the node name into the tags
-            return f"[{tags[0]}]"
-        return "[System]"
+            return f"{base_name} [{tags[0]}]"
+        return f"{base_name} [System]"
 
     def on_llm_end(self, response, **kwargs):
         agent_name = self._get_agent_name(kwargs)
@@ -101,9 +106,28 @@ class TurnMetricsHandler(BaseCallbackHandler):
 
     def on_tool_start(self, serialized, input_str, **kwargs):
         """Captures which tools were fired and what was sent to them."""
+        tags = kwargs.get("tags", [])
+        caller = tags[0] if tags else "Agent"
+
         self.metrics["tools_called"].append({
-            "name": serialized.get("name", "unknown"),
+            "name": f"[{caller}] {serialized.get('name', 'unknown')}",
             "input": input_str
+        })
+
+    def on_chain_start(self, serialized, inputs, **kwargs):
+        """Captures specialized agent invocations to display in the UI as 'actions'."""
+        name = serialized.get("name", "unknown")
+        if name in ["SearchAgent", "SummaryAgent", "MetadataAgent"]:
+            self.metrics["tools_called"].append({
+                "name": f"🔄 RouteTo({name})",
+                "input": "Delegated sub-task to specialized worker."
+            })
+
+    def log_agent_routing(self, agent_name: str, reason: str):
+        """Manually log an agent handoff as an action so the UI can display it."""
+        self.metrics["tools_called"].append({
+            "name": f"RouteTo({agent_name})",
+            "input": reason
         })
 
     def on_retriever_end(self, documents, **kwargs):
